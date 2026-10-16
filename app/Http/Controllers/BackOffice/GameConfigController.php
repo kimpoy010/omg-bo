@@ -6,14 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\BackOfficeOperationLog;
 use App\Models\GameConfig;
 use App\Models\GameConfigChangeRequest;
-use App\Services\CasinoGameMapper;
 use App\Services\GameConfigChangeService;
-use App\Services\OmgApiService;
+use App\Services\GameCatalog;
 use App\Support\GameConfigFields;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 // Game Ctrl. OMG has no API for per-game config, so saving here only
@@ -128,29 +126,9 @@ class GameConfigController extends Controller
         return $rules;
     }
 
-    // Own cache key — 'omg_game_list' holds the player lobby's transformed
-    // shape, not this normalized one.
     private function games()
     {
-        $games = Cache::remember('backoffice_omg_games', 300, function () {
-            try {
-                $raw = app(OmgApiService::class)->getGameList();
-            } catch (\Throwable) {
-                return [];
-            }
-
-            return collect($raw)->map(fn ($g) => [
-                'id'       => (string) ($g['gameid'] ?? $g['game_id'] ?? $g['id'] ?? ''),
-                'name'     => $g['name'] ?? $g['game_name'] ?? 'Unknown',
-                'provider' => CasinoGameMapper::mapProvider((int) ($g['platform_sub_brand'] ?? 0)),
-            ])->filter(fn ($g) => $g['id'] !== '')->sortBy([['provider', 'asc'], ['name', 'asc']])->values()->all();
-        });
-
-        if ($games === []) {
-            Cache::forget('backoffice_omg_games'); // don't pin a failed fetch for 5 minutes
-        }
-
-        return collect($games);
+        return app(GameCatalog::class)->all();
     }
 
     private function findGame(string $gameId): array

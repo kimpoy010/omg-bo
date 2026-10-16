@@ -5,7 +5,7 @@ Only two roles exist: **webmaster** and **merchant**.
 
 | Role | Section | What it does |
 |---|---|---|
-| `merchant` | `/backoffice` | Dashboard, merchant credit (read-only), rankings, trend, retention, player list, game/order records, live OMG bet records, per-player RTP control (calls OMG), game config & batch changes (recorded as change requests), operation log |
+| `merchant` | `/backoffice` | Dashboard (incl. per-game and per-provider bet, win, GGR, RTP vs target), merchant credit (read-only), rankings, trend, retention, player list, game/order records, live OMG bet records, per-player RTP control (calls OMG), game config & batch changes (recorded as change requests), operation log |
 | `webmaster` | `/webmaster` | Load/deduct/reset merchant credit, work through the merchant's game-config change requests, create/update the merchant login |
 
 ## Setup

@@ -8,7 +8,6 @@ use App\Models\Player;
 use App\Services\OmgApiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 // Live bet records straight from OMG (GetGameRecordList), as opposed to
@@ -75,7 +74,7 @@ class BetRecordController extends Controller
         $roundIds = $rows->pluck('round_id')->map(fn ($v) => (string) $v)->all();
         $known    = $roundIds === [] ? collect() : OmgTransaction::where('type', 1)->whereIn('round_id', $roundIds)->pluck('round_id')->flip();
         $names    = Player::whereIn('id', $rows->pluck('account_id')->filter()->map(fn ($v) => (int) $v)->unique())->pluck('username', 'id');
-        $games    = collect(Cache::get('backoffice_omg_games', []))->pluck('name', 'id');
+        $games    = app(\App\Services\GameCatalog::class)->all()->pluck('name', 'id');
 
         $records = $rows->map(fn ($r) => [
             'time'     => Carbon::createFromTimestampUTC((int) ($r['create_time'] ?? 0)),

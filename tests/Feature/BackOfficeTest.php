@@ -260,8 +260,54 @@ class BackOfficeTest extends TestCase
 
         $this->get(route('backoffice.bet-records.index', ['from' => '2024-06-01T00:00', 'to' => '2024-06-10T00:00']))
             ->assertOk()->assertSee('shortened to the 24 hours')->assertSee('query limit exceeded');
-        Http::assertSent(fn ($r) => $r->data()['end_time'] - $r->data()['start_time'] === 86400);
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'GetGameRecordList') && $r->data()['end_time'] - $r->data()['start_time'] === 86400);
 
         $this->get(route('backoffice.bet-records.index', ['search' => 'ghost']))->assertOk()->assertSee('No player named');
+    }
+
+    public function test_dashboard_game_and_provider_breakdown(): void
+    {
+        Http::fake(['*' => Http::response(['code' => 0, 'data' => ['list' => [
+            ['gameid' => '101', 'name' => 'Super Ace', 'platform_sub_brand' => 3],
+            ['gameid' => '102', 'name' => 'Fortune Gems', 'platform_sub_brand' => 3],
+            ['gameid' => '201', 'name' => 'Mahjong Ways', 'platform_sub_brand' => 2],
+        ]]])]);
+
+        $p = Player::create(['username' => 'alice']);
+        $q = Player::create(['username' => 'bob']);
+        $tx = fn ($player, $n, $type, $money, $game) => OmgTransaction::create([
+            'user_id' => $player->id, 'order_id' => $n, 'type' => $type, 'money' => $money, 'balance_after' => 0, 'game_id' => $game,
+        ]);
+        $tx($p, 'a1', 1, -100, 101); $tx($p, 'a2', 3, 40, 101);
+        $tx($q, 'b1', 1, -50, 102);  $tx($q, 'b2', 3, 100, 102);
+        $tx($p, 'c1', 1, -200, 201); $tx($p, 'c2', 3, 100, 201);
+
+        \App\Models\GameConfig::create(['game_id' => '101', 'game_name' => 'Super Ace', 'settings' => ['internal_rtp' => '90']]);
+        \App\Models\PatronControl::create(['user_id' => $p->id, 'kind' => 'nurture', 'patron_type' => 0, 'amount' => 10, 'status' => 'active']);
+
+        $this->actingAs($this->staff('merchant'));
+        $res = $this->get(route('backoffice.dashboard'))->assertOk();
+
+        $res->assertSee('Super Ace')->assertSee('Mahjong Ways')->assertSee('JILI')->assertSee('PGSoft');
+        // JILI: bet 150, win 140 -> RTP 93.33%; PGSoft: bet 200, win 100 -> 50%.
+        $res->assertSee('93.33%')->assertSee('50.00%');
+
+        $games = $res->viewData('games');
+        $this->assertSame('201', $games->first()['id']);          // highest bet first
+        $this->assertSame(90.0, $games->firstWhere('id', '101')['target']);
+        $this->assertSame(1, $res->viewData('patron')['nurture']);
+        $this->assertSame(2, $res->viewData('stats')['new_players_today']);
+
+        $this->get(route('backoffice.dashboard', ['period' => '30d']))->assertOk();
+        $this->get(route('backoffice.dashboard', ['period' => 'bogus']))->assertOk();
+    }
+
+    public function test_dashboard_works_when_omg_game_list_unavailable(): void
+    {
+        Http::fake(['*' => Http::response(['code' => 500])]);
+        $p = Player::create(['username' => 'alice']);
+        OmgTransaction::create(['user_id' => $p->id, 'order_id' => 'x', 'type' => 1, 'money' => -10, 'balance_after' => 0, 'game_id' => 999]);
+
+        $this->actingAs($this->staff('merchant'))->get(route('backoffice.dashboard'))->assertOk()->assertSee('Game 999')->assertSee('Other');
     }
 }
