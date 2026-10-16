@@ -140,4 +140,31 @@ class BackOfficeTest extends TestCase
         $this->assertSame(1, User::role('merchant')->count());
         $this->assertSame('shop2', $shop->fresh()->username);
     }
+
+    public function test_merchant_registers_callback_urls(): void
+    {
+        $this->actingAs($this->staff('merchant'));
+        $this->get(route('backoffice.settings.index'))->assertOk();
+
+        $this->post(route('backoffice.settings.update'), [
+            'verify_session_url' => 'https://shop.example.com/api/verify',
+            'get_balance_url'    => 'https://shop.example.com/api/balance',
+            'change_balance_url' => '',
+        ])->assertSessionHasNoErrors();
+
+        $urls = \App\Models\MerchantCallbackUrl::get();
+        $this->assertSame('https://shop.example.com/api/verify', $urls->verify_session_url);
+        $this->assertNull($urls->change_balance_url);
+        $this->assertDatabaseHas('backoffice_operation_logs', ['action' => 'callback_urls']);
+
+        $this->post(route('backoffice.settings.update'), ['get_balance_url' => 'http://insecure.example.com'])
+            ->assertSessionHasErrors('get_balance_url');
+        $this->post(route('backoffice.settings.update'), ['get_balance_url' => 'javascript:alert(1)'])
+            ->assertSessionHasErrors('get_balance_url');
+    }
+
+    public function test_webmaster_cannot_open_merchant_settings(): void
+    {
+        $this->actingAs($this->staff('webmaster'))->get(route('backoffice.settings.index'))->assertForbidden();
+    }
 }

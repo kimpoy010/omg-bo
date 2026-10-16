@@ -60,6 +60,9 @@
                     'Log Mgmt' => [
                         ['label' => 'Operation Log', 'route' => 'backoffice.logs.index'],
                     ],
+                    'Setting' => [
+                        ['label' => 'Callback URLs', 'route' => 'backoffice.settings.index'],
+                    ],
                 ];
             @endphp
 

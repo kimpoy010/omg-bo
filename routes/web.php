@@ -9,6 +9,7 @@ use App\Http\Controllers\BackOffice\PlayerController;
 use App\Http\Controllers\BackOffice\RankingController;
 use App\Http\Controllers\BackOffice\RetentionController;
 use App\Http\Controllers\BackOffice\RtpController;
+use App\Http\Controllers\BackOffice\SettingController;
 use App\Http\Controllers\BackOffice\TransactionController;
 use App\Http\Controllers\BackOffice\TrendController;
 use App\Http\Controllers\Webmaster\GameConfigChangeController;
@@ -53,6 +54,9 @@ Route::middleware('auth')->group(function () {
         Route::post('game-config/{gameId}', [GameConfigController::class, 'update'])->name('game-config.update');
 
         Route::get('logs', [LogController::class, 'index'])->name('logs.index');
+
+        Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
+        Route::post('settings', [SettingController::class, 'update'])->name('settings.update');
     });
 
     // Webmaster — sells credit, applies the merchant's game-config requests,
