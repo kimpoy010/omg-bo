@@ -78,7 +78,7 @@ class BackOfficeTest extends TestCase
         $this->actingAs($this->staff('merchant'));
 
         foreach (['dashboard', 'credits.index', 'rankings.index', 'trend.index', 'retention.index', 'players.index',
-                  'game-records.index', 'order-records.index', 'rtp.index', 'game-config.index', 'game-config.batch', 'logs.index'] as $name) {
+                  'game-records.index', 'order-records.index', 'rtp.index', 'patron.index', 'game-config.index', 'game-config.batch', 'logs.index'] as $name) {
             $this->get(route('backoffice.' . $name))->assertOk();
         }
 
@@ -166,5 +166,67 @@ class BackOfficeTest extends TestCase
     public function test_webmaster_cannot_open_merchant_settings(): void
     {
         $this->actingAs($this->staff('webmaster'))->get(route('backoffice.settings.index'))->assertForbidden();
+    }
+
+    public function test_merchant_nurtures_and_cancels_players(): void
+    {
+        Http::fake(['*' => Http::response(['code' => 1, 'msg' => 'success'])]);
+        $a = Player::create(['username' => 'alice']);
+        $b = Player::create(['username' => 'bob']);
+        $this->actingAs($this->staff('merchant'));
+
+        $this->post(route('backoffice.patron.store'), ['usernames' => "alice, bob", 'kind' => 'nurture', 'patron_type' => 1, 'amount' => '12.5'])
+            ->assertSessionHasNoErrors();
+
+        Http::assertSent(function ($r) use ($a, $b) {
+            $d = $r->data();
+            return str_contains($r->url(), '/patron/control/set')
+                && $d['uname'] === "{$a->id},{$b->id}" && $d['type'] === 14 && $d['amount'] === 125000 && $d['patron_type'] === 1;
+        });
+        $this->assertSame(2, \App\Models\PatronControl::where('status', 'active')->count());
+
+        // Setting again replaces the earlier active control.
+        $this->post(route('backoffice.patron.store'), ['usernames' => 'alice', 'kind' => 'kill', 'amount' => '5']);
+        $this->assertSame(1, \App\Models\PatronControl::where('user_id', $a->id)->where('status', 'active')->count());
+        $this->assertSame('kill', \App\Models\PatronControl::where('user_id', $a->id)->where('status', 'active')->value('kind'));
+
+        $this->post(route('backoffice.patron.cancel'), ['usernames' => 'alice bob'])->assertSessionHasNoErrors();
+        $this->assertSame(0, \App\Models\PatronControl::where('status', 'active')->count());
+        $this->get(route('backoffice.patron.index'))->assertOk();
+    }
+
+    public function test_patron_rejects_unknown_players_and_omg_failures_are_not_recorded(): void
+    {
+        Player::create(['username' => 'alice']);
+        $this->actingAs($this->staff('merchant'));
+
+        $this->post(route('backoffice.patron.store'), ['usernames' => 'alice ghost', 'kind' => 'kill', 'amount' => 5])
+            ->assertSessionHasErrors('usernames');
+
+        Http::fake(['*' => Http::response(['code' => 20008, 'msg' => 'sign error'])]);
+        $this->post(route('backoffice.patron.store'), ['usernames' => 'alice', 'kind' => 'kill', 'amount' => 5])
+            ->assertSessionHas('error');
+        $this->assertSame(0, \App\Models\PatronControl::count());
+    }
+
+    public function test_auto_nurturing_toggle(): void
+    {
+        Http::fake(['*' => Http::response(['code' => 1, 'msg' => 'success'])]);
+        $this->actingAs($this->staff('merchant'));
+
+        $this->post(route('backoffice.patron.auto'), ['enabled' => 1, 'amount' => '100', 'patron_type' => 0])->assertSessionHasNoErrors();
+        Http::assertSent(fn ($r) => str_contains($r->url(), '/patron/auto/config') && ($r->data()['patron_status'] ?? null) === 1 && $r->data()['patron_amount'] === 1000000);
+        $this->assertTrue(\App\Models\PatronAutoConfig::get()->enabled);
+
+        $this->post(route('backoffice.patron.auto'), ['enabled' => 0, 'cancel_all' => 1])->assertSessionHasNoErrors();
+        Http::assertSent(fn ($r) => str_contains($r->url(), '/patron/auto/config') && ($r->data()['patron_status'] ?? null) === 0 && $r->data()['is_cancel_all'] === 1);
+        $this->assertFalse(\App\Models\PatronAutoConfig::get()->enabled);
+
+        $this->post(route('backoffice.patron.auto'), ['enabled' => 1])->assertSessionHasErrors(['amount', 'patron_type']);
+    }
+
+    public function test_webmaster_cannot_use_patron_controls(): void
+    {
+        $this->actingAs($this->staff('webmaster'))->get(route('backoffice.patron.index'))->assertForbidden();
     }
 }

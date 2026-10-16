@@ -56,6 +56,7 @@
                         ['label' => 'Game Config', 'route' => 'backoffice.game-config.index', 'match' => ['backoffice.game-config.index', 'backoffice.game-config.edit']],
                         ['label' => 'Batch Changes', 'route' => 'backoffice.game-config.batch'],
                         ['label' => 'RTP Control', 'route' => 'backoffice.rtp.index'],
+                        ['label' => 'Nurturing & Killing', 'route' => 'backoffice.patron.index'],
                     ],
                     'Log Mgmt' => [
                         ['label' => 'Operation Log', 'route' => 'backoffice.logs.index'],

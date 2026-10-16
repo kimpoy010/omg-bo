@@ -5,6 +5,7 @@ use App\Http\Controllers\BackOffice\CreditController;
 use App\Http\Controllers\BackOffice\DashboardController;
 use App\Http\Controllers\BackOffice\GameConfigController;
 use App\Http\Controllers\BackOffice\LogController;
+use App\Http\Controllers\BackOffice\PatronController;
 use App\Http\Controllers\BackOffice\PlayerController;
 use App\Http\Controllers\BackOffice\RankingController;
 use App\Http\Controllers\BackOffice\RetentionController;
@@ -46,6 +47,11 @@ Route::middleware('auth')->group(function () {
         Route::get('rtp/players', [RtpController::class, 'searchPlayers'])->name('rtp.players');
         Route::post('rtp', [RtpController::class, 'store'])->name('rtp.store');
         Route::delete('rtp/{user}', [RtpController::class, 'destroy'])->name('rtp.destroy');
+
+        Route::get('patron', [PatronController::class, 'index'])->name('patron.index');
+        Route::post('patron', [PatronController::class, 'store'])->name('patron.store');
+        Route::post('patron/cancel', [PatronController::class, 'cancel'])->name('patron.cancel');
+        Route::post('patron/auto', [PatronController::class, 'auto'])->name('patron.auto');
 
         Route::get('game-config', [GameConfigController::class, 'index'])->name('game-config.index');
         Route::get('game-config/batch', [GameConfigController::class, 'batch'])->name('game-config.batch');

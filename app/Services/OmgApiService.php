@@ -144,6 +144,63 @@ class OmgApiService
         }
     }
 
+    // Amounts for the nurturing/killing APIs are sent multiplied by 10,000.
+    public static function patronAmount(float $amount): int
+    {
+        return (int) round($amount * 10000);
+    }
+
+    // Nurture (type 14) or kill (type 15) one or more players (comma-separated unames).
+    // $patronType (0 fast, 1 slow, 2 ultimate) is required for nurturing.
+    public function setPatronControl(string $uname, int $type, float $amount, ?int $patronType = null): void
+    {
+        $body = [
+            'app_id' => $this->appId,
+            'uname'  => $uname,
+            'amount' => self::patronAmount($amount),
+            'type'   => $type,
+        ];
+
+        if ($type === 14) {
+            $body['patron_type'] = $patronType ?? 0;
+        }
+
+        $this->backendCall('/api/v1/merchant/outer/patron/control/set', $body, 'omg.patron.set.failed', 'OMG nurture/kill failed');
+    }
+
+    // Cancel nurturing or killing for the players — no need to say which.
+    public function cancelPatronControl(string $uname): void
+    {
+        $this->backendCall('/api/v1/merchant/outer/cancel', ['app_id' => $this->appId, 'uname' => $uname], 'omg.patron.cancel.failed', 'OMG cancel failed');
+    }
+
+    // Toggle nurturing for every newly registered player. When turning off,
+    // $cancelAll also ends nurturing for players already in auto-nurture.
+    public function setAutoPatron(bool $enabled, ?float $amount = null, ?int $patronType = null, bool $cancelAll = false): void
+    {
+        $body = ['app_id' => $this->appId, 'patron_status' => $enabled ? 1 : 0];
+
+        if ($enabled) {
+            $body['patron_amount'] = self::patronAmount((float) $amount);
+            $body['patron_type']   = $patronType ?? 0;
+        } else {
+            $body['is_cancel_all'] = $cancelAll ? 1 : 0;
+        }
+
+        $this->backendCall('/api/v1/merchant/outer/patron/auto/config', $body, 'omg.patron.auto.failed', 'OMG auto-nurturing failed');
+    }
+
+    // Backend endpoints return code=1 on success.
+    private function backendCall(string $path, array $body, string $logKey, string $fallback): void
+    {
+        $result = $this->post($this->backendUrl . $path, $body);
+
+        if (($result['code'] ?? -1) !== 1) {
+            Log::error($logKey, $result);
+            throw new \RuntimeException($result['msg'] ?? $fallback . ' (code: ' . ($result['code'] ?? '?') . ')');
+        }
+    }
+
     // Returns ['data' => [...], 'total' => int]
     public function getGameRecords(array $params): array
     {
