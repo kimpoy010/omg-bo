@@ -51,6 +51,7 @@
                         ['label' => 'Player List', 'route' => 'backoffice.players.index'],
                         ['label' => 'Game Records', 'route' => 'backoffice.game-records.index'],
                         ['label' => 'Order Records', 'route' => 'backoffice.order-records.index'],
+                        ['label' => 'OMG Bet Records', 'route' => 'backoffice.bet-records.index'],
                     ],
                     'Game Ctrl' => [
                         ['label' => 'Game Config', 'route' => 'backoffice.game-config.index', 'match' => ['backoffice.game-config.index', 'backoffice.game-config.edit']],

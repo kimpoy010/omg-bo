@@ -201,7 +201,10 @@ class OmgApiService
         }
     }
 
-    // Returns ['data' => [...], 'total' => int]
+    // OMG's own bet records (GetGameRecordList). Timestamps are UTC seconds; OMG
+    // limits the window to 24 hours and a page to 1000 rows, and does not report
+    // a page count — keep fetching until a page comes back short.
+    // Returns ['data' => [...], 'total' => int]. Throws RuntimeException on an API error.
     public function getGameRecords(array $params): array
     {
         $body = array_merge(['app_id' => $this->appId], $params);
@@ -212,7 +215,9 @@ class OmgApiService
 
         if (($result['code'] ?? -1) !== 1) {
             Log::warning('omg.records.failed', $result);
-            return ['data' => [], 'total' => 0];
+            throw new \RuntimeException(
+                $result['msg'] ?? 'OMG bet records failed (code: ' . ($result['code'] ?? '?') . ')'
+            );
         }
 
         return [

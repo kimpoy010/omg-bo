@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\BackOffice\BetRecordController;
 use App\Http\Controllers\BackOffice\CreditController;
 use App\Http\Controllers\BackOffice\DashboardController;
 use App\Http\Controllers\BackOffice\GameConfigController;
@@ -41,6 +42,7 @@ Route::middleware('auth')->group(function () {
 
         Route::get('players', [PlayerController::class, 'index'])->name('players.index');
         Route::get('game-records', [TransactionController::class, 'index'])->name('game-records.index');
+        Route::get('omg-bet-records', [BetRecordController::class, 'index'])->name('bet-records.index');
         Route::get('order-records', [TransactionController::class, 'index'])->name('order-records.index');
 
         Route::get('rtp', [RtpController::class, 'index'])->name('rtp.index');

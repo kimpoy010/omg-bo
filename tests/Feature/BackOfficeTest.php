@@ -78,7 +78,7 @@ class BackOfficeTest extends TestCase
         $this->actingAs($this->staff('merchant'));
 
         foreach (['dashboard', 'credits.index', 'rankings.index', 'trend.index', 'retention.index', 'players.index',
-                  'game-records.index', 'order-records.index', 'rtp.index', 'patron.index', 'game-config.index', 'game-config.batch', 'logs.index'] as $name) {
+                  'game-records.index', 'order-records.index', 'bet-records.index', 'rtp.index', 'patron.index', 'game-config.index', 'game-config.batch', 'logs.index'] as $name) {
             $this->get(route('backoffice.' . $name))->assertOk();
         }
 
@@ -228,5 +228,40 @@ class BackOfficeTest extends TestCase
     public function test_webmaster_cannot_use_patron_controls(): void
     {
         $this->actingAs($this->staff('webmaster'))->get(route('backoffice.patron.index'))->assertForbidden();
+    }
+
+    public function test_omg_bet_records_page(): void
+    {
+        $p = Player::create(['username' => 'alice']);
+        OmgTransaction::create(['user_id' => $p->id, 'order_id' => 'o1', 'type' => 1, 'money' => -10, 'balance_after' => 90, 'round_id' => '1806264170304233472']);
+
+        Http::fake(['*' => Http::response(['code' => 1, 'msg' => 'success', 'total' => 2, 'data' => [
+            ['create_time' => 1719481910, 'round_id' => 1806264170304233472, 'account' => 'nick', 'account_id' => (string) $p->id,
+             'game_id' => '10049', 'win' => 0, 'bet' => 10, 'enter_money' => 100, 'after_settlement_money' => 90, 'small_game_type' => 0],
+            ['create_time' => 1719481924, 'round_id' => 1806264228693139456, 'account' => 'nick', 'account_id' => (string) $p->id,
+             'game_id' => '10049', 'win' => 2.5, 'bet' => 10, 'enter_money' => 90, 'after_settlement_money' => 82.5, 'small_game_type' => 2],
+        ]])]);
+
+        $this->actingAs($this->staff('merchant'));
+        $this->get(route('backoffice.bet-records.index', ['from' => '2024-06-27T09:00', 'to' => '2024-06-27T12:00', 'search' => 'alice', 'game_id' => '10049', 'size' => 25]))
+            ->assertOk()->assertSee('alice')->assertSee('Free spins')->assertSee('Not found')->assertSee('-17.50');
+
+        Http::assertSent(function ($r) use ($p) {
+            $d = $r->data();
+            return str_contains($r->url(), 'GetGameRecordList') && $d['uname'] === (string) $p->id && $d['game_id'] === '10049'
+                && $d['size'] === 25 && $d['page'] === 1 && $d['start_time'] === 1719478800 && $d['end_time'] === 1719489600;
+        });
+    }
+
+    public function test_omg_bet_records_limits_window_and_surfaces_errors(): void
+    {
+        Http::fake(['*' => Http::response(['code' => 20003, 'msg' => 'query limit exceeded'])]);
+        $this->actingAs($this->staff('merchant'));
+
+        $this->get(route('backoffice.bet-records.index', ['from' => '2024-06-01T00:00', 'to' => '2024-06-10T00:00']))
+            ->assertOk()->assertSee('shortened to the 24 hours')->assertSee('query limit exceeded');
+        Http::assertSent(fn ($r) => $r->data()['end_time'] - $r->data()['start_time'] === 86400);
+
+        $this->get(route('backoffice.bet-records.index', ['search' => 'ghost']))->assertOk()->assertSee('No player named');
     }
 }
