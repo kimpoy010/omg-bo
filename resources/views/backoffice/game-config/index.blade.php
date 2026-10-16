@@ -7,6 +7,10 @@
     who applies it in OMG's back office.
 </div>
 
+@if ($loadError)
+    <div class="mb-4 bg-red-50 border border-red-200 text-red-800 text-sm px-4 py-3 rounded-lg">Couldn't load the game list from OMG: {{ $loadError }}</div>
+@endif
+
 <form method="GET" class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap items-end gap-3">
     <div>
         <label class="block text-xs font-medium text-gray-500 mb-1">Provider</label>

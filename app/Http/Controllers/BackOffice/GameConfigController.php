@@ -46,7 +46,9 @@ class GameConfigController extends Controller
                 'processing' => $rows->contains(fn ($r) => $r->created_at->gt(now()->subMinutes(3))),
             ]);
 
-        return view('backoffice.game-config.index', compact('games', 'providers', 'provider', 'search', 'configs', 'updates'));
+        $loadError = $games->isEmpty() ? app(GameCatalog::class)->error() : null;
+
+        return view('backoffice.game-config.index', compact('games', 'providers', 'provider', 'search', 'configs', 'updates', 'loadError'));
     }
 
     public function edit(string $gameId): View

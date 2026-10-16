@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Exceptions\OmgApiException;
+use App\Support\OmgErrorCodes;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -49,7 +51,7 @@ class OmgApiService
             return $response->json() ?? [];
         } catch (\Throwable $e) {
             Log::error('omg.api.error', ['url' => $url, 'error' => $e->getMessage()]);
-            throw new \RuntimeException('OMG API unreachable: ' . $e->getMessage(), 0, $e);
+            throw new OmgApiException('Could not reach OMG. Check the connection and the OMG API URLs, then try again.', null, $e);
         }
     }
 
@@ -64,7 +66,7 @@ class OmgApiService
 
         if (($result['code'] ?? -1) !== 0) {
             Log::warning('omg.gamelist.failed', $result);
-            return [];
+            throw $this->failure($result);
         }
 
         $data = $result['data'] ?? [];
@@ -94,13 +96,11 @@ class OmgApiService
 
         if (($result['code'] ?? -1) !== 0) {
             Log::error('omg.ingame.failed', $result);
-            throw new \RuntimeException(
-                $result['msg'] ?? 'OMG ingame failed (code: ' . ($result['code'] ?? '?') . ')'
-            );
+            throw $this->failure($result);
         }
 
         return $result['data']['gameurl']
-            ?? throw new \RuntimeException('OMG ingame: no gameurl in response');
+            ?? throw new OmgApiException('OMG did not return a game URL.');
     }
 
     // RTP values supported by OMG → human-readable percentage labels
@@ -138,9 +138,7 @@ class OmgApiService
         // backend endpoints return code=1 for success
         if (($result['code'] ?? -1) !== 1) {
             Log::error('omg.rtp.failed', $result);
-            throw new \RuntimeException(
-                $result['msg'] ?? 'OMG RTP control failed (code: ' . ($result['code'] ?? '?') . ')'
-            );
+            throw $this->failure($result);
         }
     }
 
@@ -165,13 +163,13 @@ class OmgApiService
             $body['patron_type'] = $patronType ?? 0;
         }
 
-        $this->backendCall('/api/v1/merchant/outer/patron/control/set', $body, 'omg.patron.set.failed', 'OMG nurture/kill failed');
+        $this->backendCall('/api/v1/merchant/outer/patron/control/set', $body, 'omg.patron.set.failed');
     }
 
     // Cancel nurturing or killing for the players — no need to say which.
     public function cancelPatronControl(string $uname): void
     {
-        $this->backendCall('/api/v1/merchant/outer/cancel', ['app_id' => $this->appId, 'uname' => $uname], 'omg.patron.cancel.failed', 'OMG cancel failed');
+        $this->backendCall('/api/v1/merchant/outer/cancel', ['app_id' => $this->appId, 'uname' => $uname], 'omg.patron.cancel.failed');
     }
 
     // Toggle nurturing for every newly registered player. When turning off,
@@ -187,24 +185,24 @@ class OmgApiService
             $body['is_cancel_all'] = $cancelAll ? 1 : 0;
         }
 
-        $this->backendCall('/api/v1/merchant/outer/patron/auto/config', $body, 'omg.patron.auto.failed', 'OMG auto-nurturing failed');
+        $this->backendCall('/api/v1/merchant/outer/patron/auto/config', $body, 'omg.patron.auto.failed');
     }
 
     // Backend endpoints return code=1 on success.
-    private function backendCall(string $path, array $body, string $logKey, string $fallback): void
+    private function backendCall(string $path, array $body, string $logKey): void
     {
         $result = $this->post($this->backendUrl . $path, $body);
 
         if (($result['code'] ?? -1) !== 1) {
             Log::error($logKey, $result);
-            throw new \RuntimeException($result['msg'] ?? $fallback . ' (code: ' . ($result['code'] ?? '?') . ')');
+            throw $this->failure($result);
         }
     }
 
     // OMG's own bet records (GetGameRecordList). Timestamps are UTC seconds; OMG
     // limits the window to 24 hours and a page to 1000 rows, and does not report
     // a page count — keep fetching until a page comes back short.
-    // Returns ['data' => [...], 'total' => int]. Throws RuntimeException on an API error.
+    // Returns ['data' => [...], 'total' => int]. Throws OmgApiException on an API error.
     public function getGameRecords(array $params): array
     {
         $body = array_merge(['app_id' => $this->appId], $params);
@@ -215,14 +213,19 @@ class OmgApiService
 
         if (($result['code'] ?? -1) !== 1) {
             Log::warning('omg.records.failed', $result);
-            throw new \RuntimeException(
-                $result['msg'] ?? 'OMG bet records failed (code: ' . ($result['code'] ?? '?') . ')'
-            );
+            throw $this->failure($result);
         }
 
         return [
             'data'  => $result['data'] ?? [],
             'total' => (int) ($result['total'] ?? 0),
         ];
+    }
+
+    private function failure(array $result): OmgApiException
+    {
+        $code = isset($result['code']) && is_numeric($result['code']) ? (int) $result['code'] : null;
+
+        return new OmgApiException(OmgErrorCodes::message($code, $result['msg'] ?? null), $code);
     }
 }

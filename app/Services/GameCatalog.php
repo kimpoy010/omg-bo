@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\OmgApiException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
@@ -12,14 +13,24 @@ class GameCatalog
 {
     private const CACHE_KEY = 'backoffice_omg_games';
 
+    private ?string $error = null;
+
     public function __construct(private OmgApiService $omg) {}
+
+    // Why the last live fetch failed (null if it succeeded or was served from cache).
+    public function error(): ?string
+    {
+        return $this->error;
+    }
 
     public function all(): Collection
     {
         $games = Cache::remember(self::CACHE_KEY, 300, function () {
             try {
                 $raw = $this->omg->getGameList();
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
+                $this->error = $e instanceof OmgApiException ? $e->getMessage() : 'Could not load the OMG game list.';
+
                 return [];
             }
 

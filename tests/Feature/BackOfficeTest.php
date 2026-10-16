@@ -259,7 +259,7 @@ class BackOfficeTest extends TestCase
         $this->actingAs($this->staff('merchant'));
 
         $this->get(route('backoffice.bet-records.index', ['from' => '2024-06-01T00:00', 'to' => '2024-06-10T00:00']))
-            ->assertOk()->assertSee('shortened to the 24 hours')->assertSee('query limit exceeded');
+            ->assertOk()->assertSee('shortened to the 24 hours')->assertSee('Query limit exceeded (code 20003)');
         Http::assertSent(fn ($r) => str_contains($r->url(), 'GetGameRecordList') && $r->data()['end_time'] - $r->data()['start_time'] === 86400);
 
         $this->get(route('backoffice.bet-records.index', ['search' => 'ghost']))->assertOk()->assertSee('No player named');
@@ -309,5 +309,46 @@ class BackOfficeTest extends TestCase
         OmgTransaction::create(['user_id' => $p->id, 'order_id' => 'x', 'type' => 1, 'money' => -10, 'balance_after' => 0, 'game_id' => 999]);
 
         $this->actingAs($this->staff('merchant'))->get(route('backoffice.dashboard'))->assertOk()->assertSee('Game 999')->assertSee('Other');
+    }
+
+    public function test_omg_error_codes_are_translated(): void
+    {
+        $this->assertSame(
+            'Signature verification failed (code 20008). Check that the OMG app ID and key in this app match the merchant back office.',
+            \App\Support\OmgErrorCodes::message(20008, 'sign error')
+        );
+        $this->assertSame('The query time range cannot exceed 24 hours (code 20014). Use a shorter time range.', \App\Support\OmgErrorCodes::message(20014));
+        $this->assertSame('Something odd (code 99999)', \App\Support\OmgErrorCodes::message(99999, 'Something odd'));
+        $this->assertSame('Unknown OMG error (code 99999)', \App\Support\OmgErrorCodes::message(99999));
+        $this->assertSame('Unexpected response from OMG', \App\Support\OmgErrorCodes::message(null));
+    }
+
+    public function test_rtp_failure_shows_readable_omg_error(): void
+    {
+        Http::fake(['*' => Http::response(['code' => 20011, 'msg' => 'merchant deactivated'])]);
+        Player::create(['username' => 'alice']);
+
+        $this->actingAs($this->staff('merchant'))
+            ->post(route('backoffice.rtp.store'), ['username' => 'alice', 'switch' => 1, 'control_type' => 0])
+            ->assertSessionHas('error', fn ($m) => str_contains($m, 'The merchant account is deactivated (code 20011). Contact OMG.'));
+    }
+
+    public function test_unreachable_omg_is_reported_plainly(): void
+    {
+        Http::fake(fn () => throw new \Illuminate\Http\Client\ConnectionException('cURL error 6'));
+        Player::create(['username' => 'alice']);
+
+        $this->actingAs($this->staff('merchant'))
+            ->post(route('backoffice.patron.store'), ['usernames' => 'alice', 'kind' => 'kill', 'amount' => 5])
+            ->assertSessionHas('error', fn ($m) => str_contains($m, 'Could not reach OMG'));
+        $this->assertSame(0, \App\Models\PatronControl::count());
+    }
+
+    public function test_game_config_explains_why_the_game_list_is_empty(): void
+    {
+        Http::fake(['*' => Http::response(['code' => 10018, 'msg' => 'disabled'])]);
+
+        $this->actingAs($this->staff('merchant'))->get(route('backoffice.game-config.index'))
+            ->assertOk()->assertSee('load the game list from OMG')->assertSee('merchant account has been disabled by OMG');
     }
 }

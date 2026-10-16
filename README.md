@@ -28,6 +28,10 @@ has no player login and no callback endpoint; point it at (or sync into) those t
 `php artisan backoffice:reconcile-merchant-credit` folds in any transactions the credit balance
 hasn't counted yet (safe to run repeatedly).
 
+## OMG errors
+
+OMG error codes (general and backend) are translated to plain language, with a hint where the merchant can act, in `App\Support\OmgErrorCodes`. API failures throw `App\Exceptions\OmgApiException`.
+
 ## Tests
 
 `php artisan test`

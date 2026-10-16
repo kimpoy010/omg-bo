@@ -11,7 +11,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // One catalog per request, so a controller can read the error of the fetch it triggered.
+        $this->app->scoped(\App\Services\GameCatalog::class);
     }
 
     /**
